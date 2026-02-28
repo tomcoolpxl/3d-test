@@ -32,6 +32,8 @@ void inputAttach(GLFWwindow* window, InputState& state)
     glfwSetKeyCallback(window, keyCallback);
     glfwSetCursorPosCallback(window, cursorCallback);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    if (glfwRawMouseMotionSupported())
+        glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
 }
 
 void inputBeginFrame(InputState& state)
