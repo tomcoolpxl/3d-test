@@ -1,9 +1,9 @@
 #pragma once
+#include <vector>
 #include "Camera.h"
 #include "RigidBody.h"
 
 struct SimState {
-    Camera    camera;
-    RigidBody sphereBody;
-    // future: more bodies, constraints, etc.
+    Camera                 camera;
+    std::vector<RigidBody> bodies;
 };

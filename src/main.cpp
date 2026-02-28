@@ -2,6 +2,7 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 #include "core/SimState.h"
 #include "core/Physics.h"
@@ -34,6 +35,23 @@ int main(int /*argc*/, char* argv[])
 
     SimState sim;
     sim.camera.updateVectors();
+
+    // Spawn 8 spheres at varied positions/heights
+    const float sphMass = 1.0f;
+    const float sphR    = 0.5f;
+    const glm::vec3 spawnPts[] = {
+        { 0.0f, 5.0f,  0.0f},
+        { 1.5f, 7.0f,  1.0f},
+        {-1.5f, 6.0f, -1.0f},
+        { 3.0f, 4.0f,  0.0f},
+        {-3.0f, 8.0f,  0.5f},
+        { 0.0f, 9.0f,  1.5f},
+        { 1.5f, 6.0f, -1.5f},
+        {-1.5f, 4.0f,  1.0f},
+    };
+    sim.bodies.reserve(std::size(spawnPts));
+    for (const auto& p : spawnPts)
+        sim.bodies.push_back(makeSphere(p, sphR, sphMass));
 
     Shader shader(dir + "/shaders/object.vert",
                   dir + "/shaders/object.frag");
@@ -76,7 +94,7 @@ int main(int /*argc*/, char* argv[])
         // Mouse: apply once per render frame (it's a delta, not a rate)
         sim.camera.processMouseDelta(input.mouseDeltaX, input.mouseDeltaY, mouseSens);
 
-        // Movement: tick at fixed rate for determinism
+        // Fixed-rate physics tick
         while (accumulator >= FIXED_DT) {
             sim.camera.processMovement(
                 inputKey(input, GLFW_KEY_W),
@@ -87,10 +105,20 @@ int main(int /*argc*/, char* argv[])
                 inputKey(input, GLFW_KEY_Q),
                 moveSpeed, FIXED_DT);
 
-            // sphere physics
-            sim.sphereBody.applyForce(gravity / sim.sphereBody.invMass);
-            integrate(sim.sphereBody, FIXED_DT);
-            resolveFloor(sim.sphereBody, floorY, 0.5f, restitution);
+            // Gravity + integrate all bodies
+            for (auto& body : sim.bodies) {
+                body.applyForce(gravity / body.invMass);
+                integrate(body, FIXED_DT);
+            }
+
+            // Floor resolution
+            for (auto& body : sim.bodies)
+                resolveFloor(body, floorY, restitution);
+
+            // Sphere-sphere pairs (O(N²), N=8 → 28 pairs/tick)
+            for (std::size_t i = 0; i < sim.bodies.size(); ++i)
+                for (std::size_t j = i + 1; j < sim.bodies.size(); ++j)
+                    resolveSpherePair(sim.bodies[i], sim.bodies[j], restitution);
 
             accumulator -= FIXED_DT;
         }
@@ -119,11 +147,12 @@ int main(int /*argc*/, char* argv[])
             cube.draw();
         }
 
-        // Sphere at body position
-        {
-            glm::mat4 model = glm::translate(glm::mat4(1.0f), sim.sphereBody.position);
-            shader.setMat4("model",       model);
-            shader.setVec3("objectColor", glm::vec3(0.3f, 0.6f, 0.9f));
+        // Spheres — one Mesh, drawn per body
+        shader.setVec3("objectColor", glm::vec3(0.3f, 0.6f, 0.9f));
+        for (const auto& body : sim.bodies) {
+            glm::mat4 model = glm::translate(glm::mat4(1.0f), body.position)
+                            * glm::mat4_cast(body.orientation);
+            shader.setMat4("model", model);
             sphere.draw();
         }
 
